@@ -1,7 +1,6 @@
 import type { NextPage } from 'next';
 import Head from 'next/head';
 import styles from '../styles/Home.module.css';
-// import ImageCanvas from "../components/ImageCanvas";
 import Component from "../components/Component";
 
 
@@ -15,25 +14,14 @@ const Home: NextPage = () => {
         <link rel="icon" href="/favicon.ico" />
       </Head>
 
-      <main className={styles.main}>
-        <h1 className={styles.title}>
+      <header className={styles.appheader}>
           Folio AI
-        </h1>
+      </header>
 
-        {/* <ImageCanvas width={240} height={240}/> */}
+      <div className={styles.componentContainer}>
         <Component />
-      <div id="result" className="mt-3">
       </div>
-      </main>
 
-      <footer className={styles.footer}>
-        <a
-          href="https://onnxruntime.ai/docs"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-        </a>
-      </footer>
     </div>
   )
 }
