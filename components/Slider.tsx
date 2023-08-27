@@ -1,13 +1,15 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useContext } from 'react';
 import Sidebar from './Sidebar';
+import { SliderContext, useSlider } from './SliderContext';
+
 
 type SliderProps = {
-  image: string;
   onClose: () => void;
 };
 
-const Slider: React.FC<SliderProps> = ({ image, onClose }) => {
-  const [sliderRef, setSliderRef] = useState("");
+const Slider: React.FC<SliderProps> = ({ onClose }) => {
+  const sliderContext = useContext(SliderContext); // Use context here
+  const image = sliderContext.sliderRef;
   const [drawing, setDrawing] = useState(false);
   const [startX, setStartX] = useState(0);
   const [startY, setStartY] = useState(0);
@@ -132,10 +134,6 @@ const Slider: React.FC<SliderProps> = ({ image, onClose }) => {
     if (zoomed) {
       Object.assign(imageRef.current.style, {
         position: 'relative',
-        // left: '0',
-        // top: '0',
-        // width: 'auto',
-        // height: 'auto',
         maxWidth: '100%',
         maxHeight: '100%',
         width: '100%',
@@ -153,16 +151,29 @@ const Slider: React.FC<SliderProps> = ({ image, onClose }) => {
     }
   };
 
-  const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
-    const rect = e.target.getBoundingClientRect();
-    setCorrectedStartX(rect.left);
-    setCorrectedStartY(rect.top);
-    setViewport({
-      left: rect.left,
-      top: rect.top,
-      width: rect.width,
-      height: rect.height,
-    });
+  // const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement, Event>) => {
+  //   const rect = e.target.getBoundingClientRect();
+  //   setCorrectedStartX(rect.left);
+  //   setCorrectedStartY(rect.top);
+  //   setViewport({
+  //     left: rect.left,
+  //     top: rect.top,
+  //     width: rect.width,
+  //     height: rect.height,
+  //   });
+  // };
+
+  const classifyStyle: React.CSSProperties = {
+    position: 'absolute',
+    bottom: 0,
+    width: '50%',
+    height: '100px',
+    backgroundColor: '#f5f5f5',
+    display: 'flex',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    alignItems: 'center',
+    boxShadow: '-2px 0 5px rgba(0,0,0,0.1)',
   };
 
   const overlayStyle: React.CSSProperties = {
@@ -174,8 +185,8 @@ const Slider: React.FC<SliderProps> = ({ image, onClose }) => {
     width: Math.abs(startX - endX),
     height: Math.abs(startY - endY),
   };
-  // setSliderRef(imageRef.current);
-  console.log(sliderRef);
+  if (!sliderContext.showSlider) return null;
+  console.log(sliderContext)
   return (
     <div
       style={{
@@ -192,9 +203,8 @@ const Slider: React.FC<SliderProps> = ({ image, onClose }) => {
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
       onMouseUp={handleMouseUp}
-      // onClick={onClose}
     >
-      <Sidebar onClose={onClose} />
+      <Sidebar />
       <div
         style={{
           position: 'absolute',
@@ -205,7 +215,6 @@ const Slider: React.FC<SliderProps> = ({ image, onClose }) => {
       >
         <img
           ref={(imageRef)}
-          // ref={(imageRef) => setSliderRef(imageRef)}
           id="slider-image"
           src={image}
           alt="Slider Preview"
@@ -217,11 +226,11 @@ const Slider: React.FC<SliderProps> = ({ image, onClose }) => {
             objectFit: 'contain',
             position: 'relative',
           }}
-          onLoad={handleImageLoad}
+          // onLoad={handleImageLoad}
           onDoubleClick={handleDoubleClick}
-          // onClick={(e) => e.stopPropagation()}
         />
       </div>
+      {sliderContext.ClassifyLabel && <div style={classifyStyle}>{sliderContext.ClassifyLabel}</div>}
       {drawing && <div style={overlayStyle}></div>}
     </div>
   );
