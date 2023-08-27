@@ -1,20 +1,18 @@
-import React from 'react';
+import React, { useContext, useState } from 'react';
 import Slider from './Slider';
-import { useSlider } from './SliderContext';
+import { SliderContext, useSlider } from './SliderContext';
 
 interface ImageGridProps {
   images: string[];
-  showSlider: boolean;
   sliderIndex: number;
-  setShowSlider: (show: boolean) => void;
   setSliderIndex: (index: number) => void;
 }
 
-const ImageGrid: React.FC<ImageGridProps> = ({ images, showSlider, sliderIndex, setShowSlider, setSliderIndex }) => {
-  const { setSliderRef } = useSlider(); // Use context here
+const ImageGrid: React.FC<ImageGridProps> = ({ images, sliderIndex, setSliderIndex }) => {
+  const sliderContext = useContext(SliderContext); // Use context here
 
   return (
-    <div>
+    <div id='imagegrid'>
       {images.map((image, index) => (
         <img
           key={index}
@@ -23,13 +21,14 @@ const ImageGrid: React.FC<ImageGridProps> = ({ images, showSlider, sliderIndex, 
           style={{ width: '100px', height: '100px', margin: '5px' }}
           onClick={() => {
             setSliderIndex(index);
-            setShowSlider(true);
-            setSliderRef(image);
+            sliderContext.setShowSlider(true);
+            sliderContext.setSliderRef(image);
           }}
         />
       ))}
-      {showSlider && <Slider image={images[sliderIndex]} onClose={() => setShowSlider(false)} />}
-    </div>
+     {sliderContext.showSlider &&
+     <Slider onClose={() => sliderContext.setShowSlider(false)} />}
+     </div>
   );
 };
 

@@ -9,7 +9,7 @@ interface UploadProps {
 }
 
 const Upload: React.FC<UploadProps> = ({ handleDragOver, handleDragEnter, handleDrop, handleFileUpload, fileInput }) => (
-  <div
+  <div id="upload"
     style={{
       border: '2px dashed #aaa',
       padding: '10px',

@@ -6,7 +6,6 @@ interface CategoriesProps {
 }
 
 const Categories: React.FC<CategoriesProps> = ({ categories }) => {
-  const [showSlider, setShowSlider] = useState(false);
   const [sliderIndex, setSliderIndex] = useState(0);
 
   return (
@@ -16,9 +15,7 @@ const Categories: React.FC<CategoriesProps> = ({ categories }) => {
           <h2>{category}</h2>
           <ImageGrid
             images={categories[category]}
-            showSlider={showSlider}
             sliderIndex={sliderIndex}
-            setShowSlider={setShowSlider}
             setSliderIndex={setSliderIndex}
           />
         </div>
