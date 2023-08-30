@@ -57,7 +57,7 @@ export function replaceChannel(image: Jimp, channel: number, channelArray: Array
   // }
 
   // 3. Create a new image with the same dimensions as the input image
-  const outImage = new Jimp(image.bitmap.width, image.bitmap.height, 0x000000ff);
+  const outImage = new (Jimp as any)(image.bitmap.width, image.bitmap.height, 0x000000ff);
 
   // 4. round out value sto jimp values [0-255]
   for (let i = 0; i < imageBufferData.length; i += 4) {
@@ -171,7 +171,7 @@ export function imageRGBToYCC(image: Jimp): Jimp {
 
   // 4. Concatenate YCC to transpose [224, 224, 3] -> [3, 224, 224] to a number array
   // const transposedData = y.concat(cb).concat(cr);
-  const outImage = new Jimp(width, height, 0x000000ff); // create a new image with the same dimensions as the input image
+  const outImage = new (Jimp as any)(width, height, 0x000000ff); // create a new image with the same dimensions as the input image
   // 5. round out value sto jimp values [0-255]
   for (let i = 0; i < imageBufferData.length; i+=4) {
     // outImage.bitmap.data[i] = Math.round(y[i]);
@@ -214,7 +214,7 @@ export function imageYCCToRGB(image: Jimp): Jimp {
 
   // 4. Concatenate YCC to transpose [224, 224, 3] -> [3, 224, 224] to a number array
   // const transposedData = y.concat(cb).concat(cr);
-  const outImage = new Jimp(width, height, 0x000000ff); // create a new image with the same dimensions as the input image
+  const outImage = new (Jimp as any)(width, height, 0x000000ff); // create a new image with the same dimensions as the input image
   var y = imageBufferData[0];
   var cb = imageBufferData[1];
   var cr = imageBufferData[2];
