@@ -15,6 +15,38 @@ export async function runSqueezenetModel(preprocessedData: any): Promise<[any, n
   return [results, inferenceTime];
 }
 
+export async function runSuperResModel(preprocessedData: any): Promise<[any, number]> {
+  
+  // Create session and set options. See the docs here for more options: 
+  //https://onnxruntime.ai/docs/api/js/interfaces/InferenceSession.SessionOptions.html#graphOptimizationLevel
+  const session = await ort.InferenceSession
+                          .create('./_next/static/chunks/pages/super-resolution-10.onnx', 
+                          { executionProviders: ['webgl'], graphOptimizationLevel: 'all' });
+  console.log('Inference session created')
+  // Run inference and get results.
+  var [results, inferenceTime] =  await runImgtoImgInference(session, preprocessedData);
+  return [results, inferenceTime];
+}
+
+async function runImgtoImgInference(session: ort.InferenceSession, preprocessedData: any): Promise<[any, number]> {
+  // Get start time to calculate inference time.
+  const start = new Date();
+  // create feeds with the input name from model export and the preprocessed data.
+  const feeds: Record<string, ort.Tensor> = {};
+  feeds[session.inputNames[0]] = preprocessedData;
+  
+  // Run the session inference.
+  const outputData = await session.run(feeds);
+  // Get the end time to calculate inference time.
+  const end = new Date();
+  // Convert to seconds.
+  const inferenceTime = (end.getTime() - start.getTime())/1000;
+  // Get output results with the output name from the model export.
+  const outputimg = outputData[session.outputNames[0]];
+  // console.log('outputimg: ', outputimg);
+  return [outputimg, inferenceTime];
+}
+
 async function runInference(session: ort.InferenceSession, preprocessedData: any): Promise<[any, number]> {
   // Get start time to calculate inference time.
   const start = new Date();
@@ -35,7 +67,7 @@ async function runInference(session: ort.InferenceSession, preprocessedData: any
   
   //Get the top 5 results.
   var results = imagenetClassesTopK(outputSoftmax, 5);
-  console.log('results: ', results);
+  // console.log('results: ', results);
   return [results, inferenceTime];
 }
 
