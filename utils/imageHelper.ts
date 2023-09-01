@@ -10,23 +10,23 @@ export async function getImageTensorFromPath(path: string, dims: number[] =  [1,
   var imageTensor = imageDataToTensor(image, dims);
   // 4. return the tensor
   return imageTensor;
-}
+};
 
 export function resize(image: Jimp, width: number = 224, height: number = 224): Jimp {
   return image.resize(width, height);
-}
+};
 
 export async function loadImageFromPath(path: string): Promise<Jimp> {
   // Use Jimp to load the image and resize it.
   var imageData = await Jimp.default.read(path)
   return imageData;
-}
+};
 
 export async function getUrlFromImage(img: Jimp): Promise<string> {
   // Use Jimp to load the image and resize it.
   const imgSrc = await img.getBase64Async('image/jpeg');
   return imgSrc;
-}
+};
 
 export function getChannel(image: Jimp, channel: number): Array<number> {
   // 1. Get buffer data from image and create R, G, and B arrays.
@@ -39,7 +39,7 @@ export function getChannel(image: Jimp, channel: number): Array<number> {
     // skip data[i + 3] to filter out the alpha channel
   }
   return channelArray;
-}
+};
 
 export function replaceChannel(image: Jimp, channel: number, channelArray: Array<number>): Jimp {
   // 1. Get buffer data from image and create R, G, and B arrays.
@@ -69,7 +69,7 @@ export function replaceChannel(image: Jimp, channel: number, channelArray: Array
   }
 
   return outImage;
-}
+};
 
 export function transposeChannelDim(imageBufferData: Buffer): Array<number> {
   // 1. Get buffer data from image and create R, G, and B arrays.
@@ -114,7 +114,7 @@ export function convertArrayToTensor(float32image: Float32Array, dims: number[])
   // 4. convert to float32
   const inputTensor = new Tensor("float32", float32image, dims);
   return inputTensor;
-}
+};
 
 function imageDataToTensor(image: Jimp, dims: number[]): Tensor {
   // 1. Get buffer data from image and create R, G, and B arrays.
@@ -147,7 +147,7 @@ function imageDataToTensor(image: Jimp, dims: number[]): Tensor {
   // const inputTensor = new Tensor("float32", float32Data, dims);
   const inputTensor = convertArrayToTensor(float32Data, dims);
   return inputTensor;
-}
+};
 
 export function imageRGBToYCC(image: Jimp): Jimp {
   // 1. Get buffer data from image and create R, G, and B arrays.
@@ -188,7 +188,7 @@ export function imageRGBToYCC(image: Jimp): Jimp {
   }
   // 6. return the image
   return outImage;
-}
+};
 
 
 export function imageYCCToRGB(image: Jimp): Jimp {
@@ -246,7 +246,7 @@ export function imageYCCToRGB(image: Jimp): Jimp {
   // }
   // // 6. return the image
   // return outImage;
-}
+};
 
 
 
