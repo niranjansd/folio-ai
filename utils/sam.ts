@@ -1,6 +1,7 @@
 import * as ort from 'onnxruntime-web';
 import Jimp from "jimp";
 import * as ImgUtils from './imageHelper';
+import { Session }  from './session';
 
 export interface Point {
   x: number;
@@ -25,28 +26,43 @@ export async function runSAM(image: Jimp, input: SegmentAnythingPrompt | null = 
   ): Promise<[any, number]> {
       // Create session and set options. See the docs here for more options:
     // https://onnxruntime.ai/docs/api/js/interfaces/InferenceSession.SessionOptions.html#graphOptimizationLevel
-    const session = await ort.InferenceSession.create(
-        "./_next/static/chunks/pages/sam-10.onnx",
-        { executionProviders: ["webgl"], graphOptimizationLevel: "all" }
-    );
-    console.log("Inference session created");
-    // Run inference and get results.
-    const results = await runSAMInference(session, image, input);
-    return [results.canvas, results.elapsed];
+  
+  const encodersession = new Session({
+    numThreads: 1,
+    executionProviders: ["wasm"],
+    memoryLimitMB: 10000,
+    cacheSizeMB: 1000000,
+  });
+  const encoderpath = "./_next/static/chunks/pages/sam-encoder-quant.onnx";
+  await encodersession.init(encoderpath);
+  const decodersession = new Session({
+    numThreads: 1,  
+    executionProviders: ["wasm"],
+    memoryLimitMB: 10000,
+    cacheSizeMB: 1000000,
+  });
+  const decoderpath = "./_next/static/chunks/pages/sam-decoder-quant.onnx";
+  await decodersession.init(decoderpath);
+
+  console.log("Inference session created");
+  // Run inference and get results.
+  const results = await runSAMInference(encodersession, decodersession, image, input);
+  return [results.canvas, results.elapsed];
 }
 
 async function runSAMInference(
-    session: ort.InferenceSession,
-    image: Jimp,
+  encodersession: Session,
+  decodersession: Session,
+  image: Jimp,
     input: SegmentAnythingPrompt | null,
     ): Promise<SAMResult> {
     // Get start time to calculate inference time.
     const start = new Date();
     // create feeds with the input name from model export and the preprocessed data.
-    const encoderResult = await processSAMEncoder(session, image);
+    const encoderResult = await processSAMEncoder(encodersession, image);
     const originalWidth = image.bitmap.width;
     const originalHeight = image.bitmap.height;
-    const decoderOutput = await processSAMDecoder(session, encoderResult,
+    const decoderOutput = await processSAMDecoder(decodersession, encoderResult,
         [originalWidth, originalHeight], [1024, 1024], null, null//input.points, input.boxes
         );
 
@@ -119,7 +135,7 @@ async function runSAMInference(
     return result;
   };
 
-export async function processSAMEncoder(session: any, image: Jimp): Promise<any> {
+export async function processSAMEncoder(session: Session, image: Jimp): Promise<any> {
     const originalWidth = image.bitmap.width;
     const originalHeight = image.bitmap.height;
 
@@ -138,7 +154,7 @@ export async function processSAMEncoder(session: any, image: Jimp): Promise<any>
     return output;
 };
 
-export async function processSAMDecoder(session: any, result: any, originalDims: number[], newDims: number[],
+export async function processSAMDecoder(session: Session, result: any, originalDims: number[], newDims: number[],
                                         points: Point[] | null, boxes: Point[][] | null): Promise<ort.Tensor> {
     if (points === undefined && boxes === undefined) {
       throw Error("you must provide at least one point or box");
@@ -181,7 +197,7 @@ export async function processSAMDecoder(session: any, result: any, originalDims:
       1, onnx_label.length,]);
 
     const outputData = await session.run(feeds);
-    return outputData["masks"];      
+    return outputData["masks"];
   };
 
 export function  createCanvas(width: number, height: number): HTMLCanvasElement {
