@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import Sidebar from './Sidebar';
-import { SliderContext, useSlider } from './SliderContext';
+import { SliderContext } from './SliderContext';
 
 
 type SliderProps = {
@@ -10,13 +10,16 @@ type SliderProps = {
 const Slider: React.FC<SliderProps> = ({ onClose }) => {
   const sliderContext = useContext(SliderContext); // Use context here
   const image = sliderContext.sliderRef;
+  const imageRef = useRef<HTMLImageElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const overlays = sliderContext.overlays;
+  const overlayRef = useRef<HTMLImageElement>(null);
   const [drawing, setDrawing] = useState(false);
   const [startX, setStartX] = useState(0);
   const [startY, setStartY] = useState(0);
   const [endX, setEndX] = useState(0);
   const [endY, setEndY] = useState(0);
   const [zoomed, setZoomed] = useState(false);
-  const imageRef = useRef<HTMLImageElement>(null);
   const [correctedStartX, setCorrectedStartX] = useState(0);
   const [correctedStartY, setCorrectedStartY] = useState(0);
   const [dragging, setDragging] = useState(false);
@@ -29,6 +32,91 @@ const Slider: React.FC<SliderProps> = ({ onClose }) => {
     height: 300,
   });
 
+  // *******************************************************
+  // Canvas handlers
+  // *******************************************************
+  // New effect to draw the image on the canvas.
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (canvas) {
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+      const img = new Image();
+      img.src = image;
+      img.addEventListener('load', function(this: HTMLImageElement) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+        sliderContext.setSliderSize([this.width, this.height]);
+      })};
+  }, [image]);  
+
+  // New click handler for drawing dots on canvas.
+  const handleCanvasClick = (event: React.MouseEvent) => {
+    if (canvasRef.current) {
+      const canvas = canvasRef.current;
+      const ctx = canvas.getContext('2d');
+      const x = event.clientX - canvas.getBoundingClientRect().left;
+      const y = event.clientY - canvas.getBoundingClientRect().top;
+      if (!ctx) return;
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fill();
+
+      const scaledx = x * sliderContext.sliderSize[0] / canvas.width;
+      const scaledy = y * sliderContext.sliderSize[1] / canvas.height;
+  
+      sliderContext.setPoints([...sliderContext.points, [ scaledx, scaledy ]]);  
+    };
+    console.log(sliderContext.points);
+  };
+
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    if (!sliderContext.overlays || sliderContext.overlays.length === 0) {
+      const img = new Image();
+      img.src = sliderContext.sliderRef;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      return;
+    }
+
+    // Clear previous drawings
+    // ctx.clearRect(0, 0, canvas.width, canvas.height);
+    // Clear the canvas in case masks are null or empty
+    const masks = sliderContext.overlays;
+    const imgWidth = sliderContext.sliderSize[0];
+    const imgHeight = sliderContext.sliderSize[1];
+    const canvasWidth = canvasRef.current?.width || imgWidth; // Canvas dimensions
+    const canvasHeight = canvasRef.current?.height || imgHeight;
+    const xScale = canvasWidth / imgWidth;
+    const yScale = canvasHeight / imgHeight;
+    // Step 1: Determine unique mask IDs
+    const uniqueMasks = Array.from(new Set(masks));
+
+    // Step 2 & 3: Create overlay for each unique mask ID and plot points
+    uniqueMasks.forEach((maskId) => {
+      // Choose a color for this maskId, you can also map this dynamically
+      ctx.fillStyle = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 0.5)`;
+
+      for (let i = 0; i < masks.length; i++) {
+        if (masks[i] === maskId && maskId !== 0) {
+          const y = (i % imgHeight) * yScale;
+          const x = (Math.floor(i / imgHeight)) * xScale;
+          ctx.fillRect(x, y, xScale, yScale);
+        }
+      }
+    });
+  }, [sliderContext]);  
+  
+  // *******************************************************
+  // Slider handlers
+  // *******************************************************
+  // Effect to close the slider image viewer
   const handleKeyDown = (event: KeyboardEvent) => {
     if (event.key === 'Escape') {
       onClose();
@@ -186,7 +274,7 @@ const Slider: React.FC<SliderProps> = ({ onClose }) => {
     height: Math.abs(startY - endY),
   };
   if (!sliderContext.showSlider) return null;
-  console.log(sliderContext)
+  console.log(sliderContext);
   return (
     <div
       style={{
@@ -213,25 +301,21 @@ const Slider: React.FC<SliderProps> = ({ onClose }) => {
           height: viewport.height,
         }}
       >
-        <img
-          ref={(imageRef)}
-          id="slider-image"
-          src={image}
-          alt="Slider Preview"
+        <canvas 
+          ref={canvasRef}
+          width={viewport.width}
+          height={viewport.height}
+          onClick={handleCanvasClick}
           style={{
             maxWidth: '100%',
             maxHeight: '100%',
-            width: '100%',
-            height: '100%',
             objectFit: 'contain',
             position: 'relative',
           }}
-          // onLoad={handleImageLoad}
-          onDoubleClick={handleDoubleClick}
-        />
+        >
+        </canvas>        
       </div>
       {sliderContext.ClassifyLabel && <div style={classifyStyle}>{sliderContext.ClassifyLabel}</div>}
-      {drawing && <div style={overlayStyle}></div>}
     </div>
   );
 };
