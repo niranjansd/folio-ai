@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useContext } from 'react';
 import Sidebar from './Sidebar';
-import { SliderContext } from './SliderContext';
-
+import { SliderContext, SliderContextProps } from './SliderContext';
 
 type SliderProps = {
   onClose: () => void;
@@ -13,7 +12,7 @@ const Slider: React.FC<SliderProps> = ({ onClose }) => {
   const imageRef = useRef<HTMLImageElement>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const overlays = sliderContext.overlays;
-  const overlayRef = useRef<HTMLImageElement>(null);
+  const overlayRef = useRef<HTMLCanvasElement | null>(null);
   const [drawing, setDrawing] = useState(false);
   const [startX, setStartX] = useState(0);
   const [startY, setStartY] = useState(0);
@@ -52,8 +51,8 @@ const Slider: React.FC<SliderProps> = ({ onClose }) => {
 
   // New click handler for drawing dots on canvas.
   const handleCanvasClick = (event: React.MouseEvent) => {
-    if (canvasRef.current) {
-      const canvas = canvasRef.current;
+    if (overlayRef.current) {
+      const canvas = overlayRef.current;
       const ctx = canvas.getContext('2d');
       const x = event.clientX - canvas.getBoundingClientRect().left;
       const y = event.clientY - canvas.getBoundingClientRect().top;
@@ -68,50 +67,94 @@ const Slider: React.FC<SliderProps> = ({ onClose }) => {
   
       sliderContext.setPoints([...sliderContext.points, [ scaledx, scaledy ]]);  
     };
-    console.log(sliderContext.points);
   };
 
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
+  const plotOverlays = (canvas: HTMLCanvasElement, sliderContext: SliderContextProps) => {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
-    if (!sliderContext.overlays || sliderContext.overlays.length === 0) {
-      const img = new Image();
-      img.src = sliderContext.sliderRef;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      return;
+    const masks = sliderContext.overlays;
+    if (!masks) return;
+    let maskBounds: Array<number>;
+    if (!sliderContext.overlayBounds) {
+      maskBounds = [0, 0, sliderContext.sliderSize[0], sliderContext.sliderSize[1]];
+    } else {
+      maskBounds = sliderContext.overlayBounds;
     }
 
-    // Clear previous drawings
-    // ctx.clearRect(0, 0, canvas.width, canvas.height);
-    // Clear the canvas in case masks are null or empty
-    const masks = sliderContext.overlays;
     const imgWidth = sliderContext.sliderSize[0];
     const imgHeight = sliderContext.sliderSize[1];
-    const canvasWidth = canvasRef.current?.width || imgWidth; // Canvas dimensions
-    const canvasHeight = canvasRef.current?.height || imgHeight;
+    const canvasWidth = canvas.width || imgWidth; // Canvas dimensions
+    const canvasHeight = canvas.height || imgHeight;
     const xScale = canvasWidth / imgWidth;
     const yScale = canvasHeight / imgHeight;
     // Step 1: Determine unique mask IDs
     const uniqueMasks = Array.from(new Set(masks));
-
     // Step 2 & 3: Create overlay for each unique mask ID and plot points
     uniqueMasks.forEach((maskId) => {
+      if (maskId === 0) return;
       // Choose a color for this maskId, you can also map this dynamically
-      ctx.fillStyle = `rgba(${Math.random() * 255}, ${Math.random() * 255}, ${Math.random() * 255}, 0.5)`;
-
-      for (let i = 0; i < masks.length; i++) {
-        if (masks[i] === maskId && maskId !== 0) {
-          const y = (i % imgHeight) * yScale;
-          const x = (Math.floor(i / imgHeight)) * xScale;
-          ctx.fillRect(x, y, xScale, yScale);
+      ctx.fillStyle = `rgba(267, 61, 63, 0.5)`;
+      for (let x=maskBounds[0]; x < maskBounds[2]; x++) {
+        for (let y=maskBounds[1]; y < maskBounds[3]; y++) {
+          if (masks[y + x * imgHeight] === maskId) {
+            ctx.fillRect(x * xScale, y *yScale, xScale, yScale);
+          }
         }
       }
     });
-  }, [sliderContext]);  
+  };
+
+  const plotPoints = (canvas: HTMLCanvasElement, sliderContext: SliderContextProps) => {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    for (let i = 0; i < sliderContext.points.length; i++) {
+      const x = sliderContext.points[i][0] * canvas.width / sliderContext.sliderSize[0];
+      const y = sliderContext.points[i][1] * canvas.height / sliderContext.sliderSize[1];
+      ctx.fillStyle = '#000000';
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  // clear canvas effects
+  useEffect(() => {
+    if (sliderContext.clearCanvas === '') { return; }
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const clear = sliderContext.clearCanvas
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    const img = new Image();
+    img.onload = () => {
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      if (clear !== 'all' ) {
+        if (clear !== 'points') {
+          plotPoints(canvas, sliderContext);
+        }
+        if (clear !== 'overlays') {
+          plotOverlays(canvas, sliderContext);
+        }
+      }
+      sliderContext.setClearCanvas('');
+    }
+    img.src = sliderContext.sliderRef;
+  }, [sliderContext.clearCanvas]);  
+
+  // Plot canvas overlays
+  useEffect(() => {
+    if (!sliderContext.overlays) { return; }
+    const canvas = overlayRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    plotOverlays(canvas, sliderContext);
+    // console.log('plotting overlays');
+  }, [sliderContext.overlays]);  
   
   // *******************************************************
   // Slider handlers
@@ -274,7 +317,7 @@ const Slider: React.FC<SliderProps> = ({ onClose }) => {
     height: Math.abs(startY - endY),
   };
   if (!sliderContext.showSlider) return null;
-  console.log(sliderContext);
+  // console.log(sliderContext);
   return (
     <div
       style={{
@@ -305,15 +348,31 @@ const Slider: React.FC<SliderProps> = ({ onClose }) => {
           ref={canvasRef}
           width={viewport.width}
           height={viewport.height}
+          style={{
+            maxWidth: '100%',
+            maxHeight: '100%',
+            objectFit: 'contain',
+            position: 'absolute',
+            zIndex: 1,
+          }}
+        >
+        </canvas>
+        <canvas 
+          ref={overlayRef}
+          width={viewport.width}
+          height={viewport.height}
           onClick={handleCanvasClick}
           style={{
             maxWidth: '100%',
             maxHeight: '100%',
             objectFit: 'contain',
-            position: 'relative',
+            position: 'absolute',
+            backgroundColor: 'transparent',
+            zIndex: 2,
+
           }}
         >
-        </canvas>        
+        </canvas>
       </div>
       {sliderContext.ClassifyLabel && <div style={classifyStyle}>{sliderContext.ClassifyLabel}</div>}
     </div>
