@@ -1,22 +1,26 @@
 import React, { createContext, useContext, useState } from 'react';
 
-interface SliderContextProps {
+export interface SliderContextProps {
   sliderRef: string;
   setSliderRef: React.Dispatch<React.SetStateAction<string>>;
   showSlider: boolean;
   setShowSlider: React.Dispatch<React.SetStateAction<boolean>>;
   sliderSize: number[];
   setSliderSize: React.Dispatch<React.SetStateAction<number[]>>;
-  embeddings: Float32Array | null;
-  setEmbeddings: React.Dispatch<React.SetStateAction<Float32Array | null>>;
+  embeddings: Array<number> | null;
+  setEmbeddings: React.Dispatch<React.SetStateAction<Array<number> | null>>;
   ClassifyLabel: string;
   setClassifyLabel: React.Dispatch<React.SetStateAction<string>>;
   ClassifyConfidence: number;
   setClassifyConfidence: React.Dispatch<React.SetStateAction<number>>;
-  overlays: string[];
-  setOverlays: React.Dispatch<React.SetStateAction<string[]>>;
+  overlays: Array<number> | null;
+  setOverlays: React.Dispatch<React.SetStateAction<Array<number> | null>>;
+  overlayBounds: Array<number> | null;
+  setOverlayBounds: React.Dispatch<React.SetStateAction<Array<number> | null>>;
   points: Array<number[]>;
   setPoints: React.Dispatch<React.SetStateAction<Array<number[]>>>;
+  clearCanvas: string;
+  setClearCanvas: React.Dispatch<React.SetStateAction<string>>;
 }
 
 // Initialize with default null values or equivalent
@@ -33,21 +37,27 @@ export const SliderContext = createContext<SliderContextProps>({
   setClassifyLabel: () => {},
   ClassifyConfidence: 0,
   setClassifyConfidence: () => {},
-  overlays: [],
+  overlays: null,
   setOverlays: () => {},
+  overlayBounds: null,
+  setOverlayBounds: () => {},
   points: [],
-  setPoints: () => {}
+  setPoints: () => {},
+  clearCanvas: '',
+  setClearCanvas: () => {}
 });
 
 export const SliderProvider: React.FC = ({ children }) => {
   const [sliderRef, setSliderRef] = useState("");
   const [showSlider, setShowSlider] = useState(false);
   const [sliderSize, setSliderSize] = useState([0, 0]);
-  const [embeddings, setEmbeddings] = useState<Float32Array | null>(null);
+  const [embeddings, setEmbeddings] = useState<Array<number> | null>(null);
   const [ClassifyLabel, setClassifyLabel] = useState("");
   const [ClassifyConfidence, setClassifyConfidence] = useState(0);
-  const [overlays, setOverlays] = useState([] as string[]);
+  const [overlays, setOverlays] = useState<Array<number> | null>(null);
+  const [overlayBounds, setOverlayBounds] = useState<Array<number> | null>(null);
   const [points, setPoints] = useState([] as Array<number[]>);
+  const [clearCanvas, setClearCanvas] = useState("");
 
 
   return (
@@ -59,7 +69,9 @@ export const SliderProvider: React.FC = ({ children }) => {
         ClassifyLabel, setClassifyLabel,
         ClassifyConfidence, setClassifyConfidence,
         overlays, setOverlays,
-        points, setPoints
+        overlayBounds, setOverlayBounds,
+        points, setPoints,
+        clearCanvas, setClearCanvas
     }}>
       {children}
     </SliderContext.Provider>
