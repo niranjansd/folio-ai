@@ -76,12 +76,12 @@ export function replaceChannel(image: Jimp, channel: number, channelArray: Array
   return outImage;
 };
 
-export function transposeChannelDim(imageBufferData: Buffer): Array<number> {
+export function transposeChannelDim(imageBufferData: Buffer | Float32Array, dims: number = 4): Array<number> {
   // 1. Get buffer data from image and create R, G, and B arrays.
   const [redArray, greenArray, blueArray] = new Array(new Array<number>(), new Array<number>(), new Array<number>());
 
   // 2. Loop through the image buffer and extract the R, G, and B channels
-  for (let i = 0; i < imageBufferData.length; i += 4) {
+  for (let i = 0; i < imageBufferData.length; i += dims) {
     redArray.push(imageBufferData[i]);
     greenArray.push(imageBufferData[i + 1]);
     blueArray.push(imageBufferData[i + 2]);
@@ -92,6 +92,26 @@ export function transposeChannelDim(imageBufferData: Buffer): Array<number> {
   const transposedData = redArray.concat(greenArray).concat(blueArray);
   return transposedData;
 };
+
+export function inverseTransposeChannelDim(transposedData: Array<number> | Float32Array, dims: number = 4): Float32Array {
+  const length = transposedData.length;
+  const channelSize = length / dims;
+  const originalData = new Float32Array(length);
+  
+  // The starting indices for the red, green, and blue channels in the transposed data
+  const redStart = 0;
+  const greenStart = channelSize;
+  const blueStart = 2 * channelSize;
+
+  for (let i = 0; i < channelSize; ++i) {
+    originalData[i * dims] = transposedData[redStart + i];
+    originalData[i * dims + 1] = transposedData[greenStart + i];
+    originalData[i * dims + 2] = transposedData[blueStart + i];
+    // Skip alpha channel or other dims: originalData[i * dims + 3] = ...;
+  }
+
+  return originalData;
+}
 
 export function convertImgToFloat(image: Array<number>, dims: number[]): Float32Array {
   // 4. convert to float32
@@ -115,7 +135,7 @@ export function scaleImgToFloat(image: Array<number>, dims: number[], scale: num
   return float32Data;
 };
 
-export function convertFloatToImg(float32Data: Float32Array, dims: number[]): Array<number> {
+export function convertFloatToInt8(float32Data: Float32Array): Array<number> {
   // 4. convert to float32
   let i, l = float32Data.length; // length, we need this for the loop
   // create the Float32Array size 3 * 224 * 224 for these dimensions output
@@ -126,8 +146,21 @@ export function convertFloatToImg(float32Data: Float32Array, dims: number[]): Ar
   return ImgData;
 };
 
-export function convertArrayToTensor(float32image: Float32Array, dims: number[]): Tensor {
+export function convertFloatToImg(float32Data: Float32Array, dims: number[]): Jimp {
   // 4. convert to float32
+  let i, l = float32Data.length; // length, we need this for the loop
+  // create the Float32Array size 3 * 224 * 224 for these dimensions output
+  const ImgData = new (Jimp as any)(dims[0], dims[1], 0x000000ff);
+  for (i = 0; i < l; i += 3) {
+    ImgData.bitmap.data[4*i/3] = Math.min(255, Math.max(0, Math.round(float32Data[i] * 255.0))); // convert to float
+    ImgData.bitmap.data[4*i/3+1] = Math.min(255, Math.max(0, Math.round(float32Data[i+1] * 255.0))); // convert to float
+    ImgData.bitmap.data[4*i/3+2] = Math.min(255, Math.max(0, Math.round(float32Data[i+2] * 255.0))); // convert to float
+    ImgData.bitmap.data[4*i/3+3] = 255; // convert to float
+  }
+  return ImgData;
+};
+
+export function convertArrayToTensor(float32image: Float32Array, dims: number[]): Tensor {
   const inputTensor = new Tensor("float32", float32image, dims);
   return inputTensor;
 };
@@ -206,18 +239,21 @@ export function crop(image: Jimp, croppedwidth: number, croppedheight: number): 
   return image;
 };
 
-export function pad(image: Jimp, padSize: number): Jimp {
+export function pad(image: Jimp, padSize: number, center: boolean = false): Jimp {
   // Get dimensions of the original image
   const width = image.getWidth();
   const height = image.getHeight();
-
-  const startX = (padSize - image.bitmap.width) / 2;
-  const startY = (padSize - image.bitmap.height) / 2;
-
   // Create a new blank image with the padded dimensions
   const paddedImage = new (Jimp as any)(padSize, padSize, 0xFFFFFFFF)
+  if (center) {
+    const startX = (padSize - width) / 2;
+    const startY = (padSize - height) / 2;  
+    paddedImage.composite(image, startX, startY);
+  } else {
+    paddedImage.composite(image, 0, 0);
+  };
+
   // Place the original image into the padded image
-  paddedImage.composite(image, startX, startY);
   return paddedImage;
 };
 
@@ -227,20 +263,61 @@ export function padToSquare(image: Jimp): Jimp {
   return paddedimage;
 };
 
+export function normalizeAndTranspose(image: Jimp, mean: number[], std: number[]): Float32Array {
+  var imageBufferData = image.bitmap.data;
+  const [redArray, greenArray, blueArray] = new Array(new Array<number>(), new Array<number>(), new Array<number>());
+  const height = image.bitmap.height
+  const width = image.bitmap.width
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (x >= image.bitmap.width || y >= image.bitmap.height) {
+        redArray.push(0.0);
+        greenArray.push(0.0);
+        blueArray.push(0.0);
+        continue;
+      }
+      const color = image.getPixelColor(x, y);
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore
+      const rgba = Jimp.intToRGBA(color);
+      let value = (rgba.r / 255 - mean[0]) / std[0]
+      redArray.push(value);
+      value = (rgba.g / 255 - mean[0]) / std[0]
+      greenArray.push(value);
+      value = (rgba.b / 255 - mean[0]) / std[0]
+      blueArray.push(value);
+    }
+  }
+  const imagedata = redArray.concat(greenArray).concat(blueArray);
+  const float32Data = new Float32Array(imagedata);
+  return float32Data;
+}
+
 export function normalize(image: Jimp, mean: number[], std: number[]): Float32Array {
   // 1. Get buffer data from image and create R, G, and B arrays.
   var imageBufferData = image.bitmap.data;
   const [redArray, greenArray, blueArray] = new Array(new Array<number>(), new Array<number>(), new Array<number>());
-
-  // 2. Loop through the image buffer and extract the R, G, and B channels
-  const float32Data = new Float32Array(imageBufferData.length);
+  
+  // // 2. Loop through the image buffer and extract the R, G, and B channels
+  const float32Data = new Float32Array(imageBufferData.length*3/4);
   for (let i = 0; i < imageBufferData.length; i += 4) {
-    float32Data[i] = (imageBufferData[i] - mean[0]) / std[0];
-    float32Data[i] = (imageBufferData[i + 1] - mean[1]) / std[1];
-    float32Data[i] = (imageBufferData[i + 2] - mean[2]) / std[2];
+    float32Data[3*i/4] = (imageBufferData[i] / 255 - mean[0]) / std[0];
+    float32Data[3*i/4 +1] = (imageBufferData[i + 1] / 255 - mean[1]) / std[1];
+    float32Data[3*i/4 + 2] = (imageBufferData[i + 2] / 255 - mean[2]) / std[2];
     // skip data[i + 3] to filter out the alpha channel
   }
   return float32Data;
 };
 
+export const overlayMasksOnImage = async (image: Jimp, masks: [Jimp], x: number = 0, y: number = 0, alpha: number = 0.5) => {
+  // Read the main image
+  // Iterate over each mask path and apply it to the image
+  for (const mask of masks) {
+    mask.opacity(alpha); // Set opacity of the mask
+    image.composite(mask, x, y); // Overlay the mask
+  }
+
+  // Save or return the result
+  return image;
+};
 
