@@ -17,59 +17,84 @@ export type SAMResult = {
 };
 
 export type SegmentAnythingPrompt = {
-  image: string | ArrayBuffer | undefined;
-  points: Point[] | undefined;
-  boxes: Point[][] | undefined;
+  image: string | ArrayBuffer | null;
+  points: Point[] | null;
+  boxes: Point[][] | null;
 };
 
-export async function runSAM(image: Jimp, input: SegmentAnythingPrompt | null = null
-  ): Promise<[any, number]> {
-      // Create session and set options. See the docs here for more options:
-    // https://onnxruntime.ai/docs/api/js/interfaces/InferenceSession.SessionOptions.html#graphOptimizationLevel
-  
-  const encodersession = new Session({
-    numThreads: 1,
-    executionProviders: ["wasm"],
-    memoryLimitMB: 10000,
-    cacheSizeMB: 1000000,
-  });
-  const encoderpath = "./_next/static/chunks/pages/sam-encoder-quant.onnx";
-  await encodersession.init(encoderpath);
-  const decodersession = new Session({
-    numThreads: 1,  
-    executionProviders: ["wasm"],
-    memoryLimitMB: 10000,
-    cacheSizeMB: 1000000,
-  });
-  const decoderpath = "./_next/static/chunks/pages/sam-decoder-quant.onnx";
-  await decodersession.init(decoderpath);
+export async function loadSAM(image: Jimp): Promise<[Session, Session]> {
+  // Create session and set options. See the docs here for more options:
+// https://onnxruntime.ai/docs/api/js/interfaces/InferenceSession.SessionOptions.html#graphOptimizationLevel
 
-  console.log("Inference session created");
-  // Run inference and get results.
-  const results = await runSAMInference(encodersession, decodersession, image, input);
-  return [results.canvas, results.elapsed];
-}
+const start = new Date();
+const encodersession = new Session({
+numThreads: 1,
+executionProviders: ["wasm"],
+memoryLimitMB: 10000,
+cacheSizeMB: 1000000,
+});
+const encoderpath = "./_next/static/chunks/pages/sam-encoder-quant.onnx";
+await encodersession.init(encoderpath);
+const decodersession = new Session({
+numThreads: 1,  
+executionProviders: ["wasm"],
+memoryLimitMB: 10000,
+cacheSizeMB: 1000000,
+});
+const decoderpath = "./_next/static/chunks/pages/sam-decoder-quant.onnx";
+await decodersession.init(decoderpath);
+console.log("Inference session created");
+return [encodersession, decodersession];
+};
 
-async function runSAMInference(
-  encodersession: Session,
+export async function loadEmbedding(encodersession: Session, image: Jimp): Promise<Array<number>> {
+  // Create session and set options. See the docs here for more options:
+// https://onnxruntime.ai/docs/api/js/interfaces/InferenceSession.SessionOptions.html#graphOptimizationLevel
+
+const processed_image = runSAMPreprocess(image);
+
+// convert image to tensor
+const imageTensor = await ImgUtils.convertArrayToTensor(processed_image, [1, 3, 1024, 1024]);
+
+// create feeds with the input name from model export and the preprocessed data.
+const encoderResult = await processSAMEncoder(encodersession, imageTensor);
+const embedding = Array.from(encoderResult.data as Float32Array);
+return embedding;
+};
+
+export function runSAMPreprocess(image: Jimp): Float32Array {
+    // resize image to 1024 longer side
+    image = ImgUtils.resize_longer(image, 1024, true);
+    const newWidth = image.bitmap.width;
+    const newHeight = image.bitmap.height;
+    // pad to 1024x1024 aligned top left
+    image = ImgUtils.pad(image, 1024);
+    // transpose image and normalize each channel separately
+    const transposedimage = ImgUtils.normalizeAndTranspose(image, [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]);
+  return transposedimage;
+};
+
+export async function runSAM(
   decodersession: Session,
   image: Jimp,
-    input: SegmentAnythingPrompt | null,
-    ): Promise<SAMResult> {
-    // Get start time to calculate inference time.
-    const start = new Date();
-    // create feeds with the input name from model export and the preprocessed data.
-    const encoderResult = await processSAMEncoder(encodersession, image);
+  embedding: Array<number>,
+  input: SegmentAnythingPrompt,
+    ): Promise<[Array<number>, Array<number>, Array<number>]> {
+
+    // original image dims
     const originalWidth = image.bitmap.width;
     const originalHeight = image.bitmap.height;
+    // create feeds with the input name from model export and the preprocessed data.
+    const encoderResult = ImgUtils.convertArrayToTensor(new Float32Array(embedding), [1, 256, 64, 64]);
     const decoderOutput = await processSAMDecoder(decodersession, encoderResult,
-        [originalWidth, originalHeight], [1024, 1024], null, null//input.points, input.boxes
+        [originalWidth, originalHeight], input.points, input.boxes
         );
 
     const size = decoderOutput.dims[2] * decoderOutput.dims[3] * 4;
     const arrayBuffer = new ArrayBuffer(size);
-    const pixels = new Uint8ClampedArray(arrayBuffer);
-    const color = [237, 61, 26];
+    const height = decoderOutput.dims[2];
+    const width = decoderOutput.dims[3];
+    const mask = new Array<number>();
     const topLeft: Point = {
       x: Infinity,
       y: Infinity,
@@ -80,15 +105,10 @@ async function runSAMInference(
       y: 0,
       positive: false,
     };
-    for (let y = 0; y < decoderOutput.dims[2]; y++) {
-      for (let x = 0; x < decoderOutput.dims[3]; x++) {
-        const value = decoderOutput.data[y * decoderOutput.dims[3] + x];
-        if ((value as number) > 0) {
-          const idx = (y * decoderOutput.dims[3] + x) * 4;
-          pixels[idx] = color[0];
-          pixels[idx + 1] = color[1];
-          pixels[idx + 2] = color[2];
-          pixels[idx + 3] = 255;
+    const color = [230, 100, 100, 255];
+    for (let x = 0; x < width; x++) {
+      for (let y = 0; y < height; y++) {
+        if (decoderOutput.data[y * width + x] > 0) {
           if (x < topLeft.x) {
             topLeft.x = x;
           }
@@ -101,80 +121,55 @@ async function runSAMInference(
           if (y > bottomRight.y) {
             bottomRight.y = y;
           }
+          mask.push(1);
         } else {
-          pixels[y] = 0;
-          pixels[y + 1] = 0;
-          pixels[y + 2] = 0;
-          pixels[y + 3] = 0;
+          mask.push(0);
         }
       }
     }
-    const imageData = new ImageData(
-      pixels,
-      decoderOutput.dims[3],
-      decoderOutput.dims[2]
-    );
-    const resCanvas = createCanvas(imageData.width, imageData.height);
-    const ctx = resCanvas.getContext("2d");
-    if (
-      // ctx instanceof OffscreenCanvasRenderingContext2D ||
-      ctx instanceof CanvasRenderingContext2D
-    ) {
-      ctx.putImageData(imageData, 0, 0);
-    } else {
-      throw new Error("Invalid rendering context");
-    }
-    const end = new Date();
-    const elapsed = (end.getTime() - start.getTime()) / 1000;
-    const result: SAMResult = {
-      canvas: resCanvas,
-      elapsed: elapsed,
-      topLeft: topLeft,
-      bottomRight: bottomRight,
-    };
-    return result;
+    return [embedding, mask, [topLeft.x, topLeft.y, bottomRight.x, bottomRight.y]];
   };
 
-export async function processSAMEncoder(session: Session, image: Jimp): Promise<any> {
-    const originalWidth = image.bitmap.width;
-    const originalHeight = image.bitmap.height;
-
-    image = ImgUtils.resize_longer(image, 1024, true);
-    image = ImgUtils.pad(image, 1024);
-    const floatimage = ImgUtils.normalize(image, [0.485, 0.456, 0.406], [0.229, 0.224, 0.225]);
-
-    const imageTensor = await ImgUtils.convertArrayToTensor(floatimage, [1, 3, 1024, 1024]);
-
+export async function processSAMEncoder(session: Session, imageTensor: ort.Tensor): Promise<any> {
     const feeds: Record<string, ort.Tensor> = {};
     feeds["x"] = imageTensor;
     const outputData = await session.run(feeds);
     const outputNames = await session.outputNames();
     const output = outputData[outputNames[0]];
-
     return output;
 };
 
-export async function processSAMDecoder(session: Session, result: any, originalDims: number[], newDims: number[],
-                                        points: Point[] | null, boxes: Point[][] | null): Promise<ort.Tensor> {
+export async function processSAMDecoder(session: Session, embedding: any, originalDims: number[],
+                                        points: Point[] | null, boxes: Point[][] | null): Promise<any> {
     if (points === undefined && boxes === undefined) {
       throw Error("you must provide at least one point or box");
     }
     const onnx_coord: number[] = [];
     const onnx_label: number[] = [];
+    // choose the smaller scale
+    const scalex = 1024 / originalDims[0];
+    const scaley = 1024 / originalDims[1];
+    let scale;
+    if (scalex < scaley) {
+      scale = scalex;
+    } else {
+      scale = scaley;
+    };
+
     if (points !== null) {
       for (const point of points) {
-        onnx_coord.push((point.x / originalDims[0]) * newDims[0]);
-        onnx_coord.push((point.y / originalDims[1]) * newDims[1]);
+        onnx_coord.push(point.x * scale);
+        onnx_coord.push(point.y * scale);
         onnx_label.push(point.positive ? 1 : 0);
       }
     }
     if (boxes !== null) {
       for (const box of boxes) {
-        onnx_coord.push((box[0].x / originalDims[0]) * newDims[0]);
-        onnx_coord.push((box[0].y / originalDims[1]) * newDims[1]);
+        onnx_coord.push(box[0].x * scalex);
+        onnx_coord.push(box[0].y * scaley);
         onnx_label.push(2);
-        onnx_coord.push((box[1].x / originalDims[0]) * newDims[0]);
-        onnx_coord.push((box[1].y / originalDims[1]) * newDims[1]);
+        onnx_coord.push(box[1].x * scalex);
+        onnx_coord.push(box[1].y * scaley);
         onnx_label.push(3);
       }
     } else {
@@ -182,21 +177,25 @@ export async function processSAMDecoder(session: Session, result: any, originalD
       onnx_coord.push(0);
       onnx_label.push(-1);
     }
+    // console.log('onnx_coord: ', onnx_coord);
+    // console.log('onnx_label: ', onnx_label);
+    // console.log('embedding: ', embedding.dims);
     const feeds: Record<string, ort.Tensor> = {};
-    feeds["image_embeddings"] = result;
+    feeds["image_embeddings"] = embedding;
     feeds["mask_input"] = new ort.Tensor(
       new Float32Array(256 * 256).fill(1),
       [1, 1, 256, 256]
     );
     feeds["has_mask_input"] = new ort.Tensor(new Float32Array(1).fill(0), [1]);
     feeds["orig_im_size"] = new ort.Tensor(
-      new Float32Array([originalDims[0], originalDims[1]]), [2]);
+      new Float32Array([originalDims[1], originalDims[0]]), [2]);
     feeds["point_coords"] = new ort.Tensor(new Float32Array(onnx_coord), [
       1, onnx_coord.length / 2, 2,]);
     feeds["point_labels"] = new ort.Tensor(new Float32Array(onnx_label), [
       1, onnx_label.length,]);
-
+    // console.log('feeds: ', feeds);
     const outputData = await session.run(feeds);
+    // console.log(outputData)
     return outputData["masks"];
   };
 

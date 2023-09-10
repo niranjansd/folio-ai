@@ -2,6 +2,46 @@
 // Path: react-next\utils\predict.ts
 import * as ImgUtils from './imageHelper';
 import { runSqueezenetModel, runSuperResModel } from './modelHelper';
+import { runSAM, SegmentAnythingPrompt, Point, loadEmbedding, loadSAM } from './sam';
+import { Session }  from './session';
+
+export async function inferenceSAM(slidercontext: any,
+                                   decodersession: Session | null,
+                                   encodersession: Session | null): Promise<[Array<number>, Array<number>, Array<number>]> {
+
+  // 1. Get inputs
+  const path = slidercontext.sliderRef;
+  var inputembedding = slidercontext.embeddings;  
+
+  // 2. Convert image to tensor
+  const image = await ImgUtils.loadImageFromPath(path);
+  if (!decodersession) {
+    let encodersession: Session;
+    [encodersession, decodersession] = await loadSAM(image);
+  }
+  if (!inputembedding) {
+    if (!encodersession) {
+      let encodersession: Session;
+      [encodersession, decodersession] = await loadSAM(image);
+      inputembedding = await loadEmbedding(encodersession, image);
+    } else {
+      inputembedding = await loadEmbedding(encodersession, image);
+    }
+  }
+
+  const points = slidercontext.points;
+  let prompt: SegmentAnythingPrompt = {image: null, points: null, boxes: null};
+  let point_inputs: Array<{ x: number, y: number, positive: boolean }> = [];
+  if (points.length > 0) {
+    for (const point of points) {
+      point_inputs.push({ x: point[0], y: point[1], positive: true });
+    }
+    prompt.points = point_inputs;
+  }
+  // 3. Run model
+  const [embedding, mask, maskBounds] = await runSAM(decodersession, image, inputembedding, prompt);
+  return [embedding, mask, maskBounds];
+}
 
 export async function inferenceSqueezenet(path: string): Promise<[any,number]> {
   // 1. Convert image to tensor
@@ -35,7 +75,7 @@ export async function inferenceSuperRes(path: string): Promise<[string, number]>
 
   // 5. Run model
   const [predictions, inferenceTime] = await runSuperResModel(grayscaleTensor);
-  const predictionsImage = ImgUtils.convertFloatToImg(predictions.data, [1, 1, 672, 672]);
+  const predictionsImage = ImgUtils.convertFloatToInt8(predictions.data);
   // 6. Convert YCC to RGB
   const resizedOutputImage = ImgUtils.resize(imageYCC, 672, 672);
   const upscaledImage = ImgUtils.replaceChannel(resizedOutputImage, 0, predictionsImage);

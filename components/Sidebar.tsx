@@ -1,9 +1,16 @@
 import React, { useContext, useState } from 'react';
 import { SliderContext, useSlider } from './SliderContext';
-import { inferenceSqueezenet, inferenceSuperRes } from '../utils/predict';
+import { inferenceSqueezenet, inferenceSuperRes, inferenceSAM } from '../utils/predict';
+import { loadEmbedding, loadSAM } from '../utils/sam';
+import * as ImgUtils from '../utils/imageHelper';
+import { Session } from '../utils/session';
 
 const Sidebar: React.FC = () => {
   const sliderContext = useContext(SliderContext); // Use context here
+  const [isLoading, setLoading] = useState(false);
+  const [loadingText, setLoadingText] = useState("");
+  const [encoderSession, setEncoderSession] = useState<Session | null>(null);
+  const [decoderSession, setDecoderSession] = useState<Session | null>(null);
 
   const handleButtonHover = (e: React.MouseEvent<HTMLButtonElement>) => {
     e.currentTarget.style.backgroundColor = '#0056b3';
@@ -13,24 +20,57 @@ const Sidebar: React.FC = () => {
     // Implement zoom logic here
   };
 
-  const handleSegment = () => {
-    console.log('Segmenting image...');
+  const handleLoadModel = async () => {
+    setLoading(true);
+    setLoadingText("Loading model...");
+    if (sliderContext) {
+      const path = sliderContext.sliderRef;
+      const image = await ImgUtils.loadImageFromPath(path);
+      const [encoderSession, decoderSession] = await loadSAM(image);
+      setDecoderSession(decoderSession);
+      setEncoderSession(encoderSession);
+      if (!sliderContext.embeddings) {
+        const embedding = await loadEmbedding(encoderSession, image);
+        sliderContext.setEmbeddings(embedding);
+      }
+    } else {
+      console.log('Slider reference is not set. Unable to load model.');
+    }
+    setLoading(false);
+  };
+
+  const handleSegment = async () => {
+    setLoading(true);
+    setLoadingText("Segmenting...");    
+    if (sliderContext) {
+      var [embedding, mask, maskBounds] = await inferenceSAM(sliderContext, decoderSession, encoderSession);
+      sliderContext.setOverlayBounds(maskBounds);
+      sliderContext.setOverlays(mask);
+      sliderContext.setPoints([]);
+      sliderContext.setEmbeddings(embedding);
+    } else {
+      console.log('Slider reference is not set. Unable to segment.');
+    }
+    setLoading(false);
   };
 
   const handleUpscale = async () => {
-    // Implement grab logic here
+    setLoading(true);
+    setLoadingText("Upscaling...");
     if (sliderContext) {  
       console.log('Upscaling image...');
       var [inferenceResult, infTime] = await inferenceSuperRes(sliderContext.sliderRef);
       sliderContext.setSliderRef(inferenceResult);
-      // console.log(sliderContext);
     } else {
       console.log('Slider reference is not set. Unable to classify.');
     }
+    setLoading(false);
   };
 
   // Define your handlers here
   const handleClassify = async () => {  
+    setLoading(true);
+    setLoadingText("Classifying...");    
     if (sliderContext) {  
       console.log('Classifying image...');
 
@@ -46,17 +86,26 @@ const Sidebar: React.FC = () => {
     } else {
       console.log('Slider reference is not set. Unable to classify.');
     }
+    setLoading(false);
   };
 
   const onClose = () => {
     sliderContext.setShowSlider(false);
   };
 
+  const handleClear = () => {
+    sliderContext.setPoints([]);
+    sliderContext.setOverlays(null);
+    sliderContext.setClassifyLabel("");
+    sliderContext.setClassifyConfidence(0);
+    sliderContext.setClearCanvas("all");
+  };
+
   const sidebarStyle: React.CSSProperties = {
     position: 'absolute',
     right: 0,
     top: 0,
-    width: '100px',
+    width: '125px',
     height: '100%',
     backgroundColor: '#f5f5f5',
     display: 'flex',
@@ -80,25 +129,24 @@ const Sidebar: React.FC = () => {
     transition: 'background-color 0.3s',
   };
 
-
+  
   return (
     <div>
-    <div style={sidebarStyle}>
+      <div style={sidebarStyle}>
+      {isLoading ? <div>{loadingText}</div> : null}
       <button style={buttonStyle}
               onClick={onClose} onMouseEnter={handleButtonHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Close</button>
       <button style={buttonStyle}
-              onClick={handleClassify} onMouseEnter={handleButtonHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Classify</button>
+              disabled={(sliderContext.embeddings !== null && decoderSession !== null) || isLoading}
+              onClick={handleLoadModel} onMouseEnter={handleButtonHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Load</button>
       <button style={buttonStyle}
-              onClick={handleZoom} onMouseEnter={handleButtonHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Zoom</button>
+              onClick={handleClear} onMouseEnter={handleButtonHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Clear</button>
       <button style={buttonStyle}
               onClick={handleSegment} onMouseEnter={handleButtonHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Segm</button>
-      <button style={buttonStyle}
-              onClick={handleUpscale} onMouseEnter={handleButtonHover}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>HiRes</button>
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Segment</button>
     </div>
     </div>
   );
