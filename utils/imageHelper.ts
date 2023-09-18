@@ -31,6 +31,23 @@ export function resize_longer(image: Jimp, size: number, longer: boolean, mode: 
     }
   }
 };
+export async function maskImage(path: string, mask: Array<number>, imgWidth: number, imgHeight: number): Promise<Jimp> {
+  // 1. load the image
+  var image = await loadImageFromPath(path);
+  for (let x=0; x < imgWidth; x++) {
+    for (let y=0; y < imgHeight; y++) {
+      var i = y + x * imgHeight
+      var j = x + y * imgWidth     
+      if (mask[j] === 0) {
+        image.bitmap.data[i * 4] = 0;
+        image.bitmap.data[i * 4 + 1] = 0;
+        image.bitmap.data[i * 4 + 2] = 0;
+        image.bitmap.data[i * 4 + 3] = 0;
+      }
+    }
+  }
+  return image;
+};
 
 export async function loadImageFromPath(path: string): Promise<Jimp> {
   // Use Jimp to load the image and resize it.
@@ -38,7 +55,7 @@ export async function loadImageFromPath(path: string): Promise<Jimp> {
   return imageData;
 };
 
-export async function getUrlFromImage(img: Jimp): Promise<string> {
+export async function imageToDataURL(img: Jimp): Promise<string> {
   // Use Jimp to load the image and resize it.
   const imgSrc = await img.getBase64Async('image/jpeg');
   return imgSrc;
