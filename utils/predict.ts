@@ -84,7 +84,7 @@ export async function inferenceSuperRes(path: string): Promise<[string, number]>
   // const outputImage = upscaledImage;
  
   const outputRGBImage = ImgUtils.imageYCCToRGB(outputImage);
-  const processedImgSrc = await ImgUtils.getUrlFromImage(outputRGBImage);
+  const processedImgSrc = await ImgUtils.imageToDataURL(outputRGBImage);
 
   // 3. Return predictions and the amount of time it took to inference.
   return [processedImgSrc, inferenceTime];
