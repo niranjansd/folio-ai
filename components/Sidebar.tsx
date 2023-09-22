@@ -47,11 +47,27 @@ const Sidebar: React.FC = () => {
       sliderContext.setOverlayBounds(maskBounds);
       sliderContext.setOverlays(mask);
       sliderContext.setPoints([]);
-      sliderContext.setEmbeddings(embedding);
+      // sliderContext.setEmbeddings(embedding);
     } else {
       console.log('Slider reference is not set. Unable to segment.');
     }
     setLoading(false);
+  };
+
+  const handleCut = async () => {
+    if (sliderContext) {
+      const imgWidth = sliderContext.sliderSize[0];
+      const imgHeight = sliderContext.sliderSize[1];
+      const mask = sliderContext.overlays;
+      if (!mask) {return};
+      const maskedImage = await ImgUtils.maskImage(sliderContext.sliderRef, mask, imgWidth, imgHeight);
+      const imgurl = await ImgUtils.imageToDataURL(maskedImage);
+      sliderContext.setSliderRef(imgurl);
+      sliderContext.setOverlays(null);
+      sliderContext.setPoints([]);
+      sliderContext.setEmbeddings(null);
+      sliderContext.setOverlayBounds(null);
+    }
   };
 
   const handleUpscale = async () => {
@@ -147,6 +163,9 @@ const Sidebar: React.FC = () => {
       <button style={buttonStyle}
               onClick={handleSegment} onMouseEnter={handleButtonHover}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Segment</button>
+      <button style={buttonStyle}
+              onClick={handleCut} onMouseEnter={handleButtonHover}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#007bff'}>Cut</button>
     </div>
     </div>
   );
