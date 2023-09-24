@@ -12,11 +12,15 @@ Categorize, search, change resolution, tag people and objects.
 - ~~Categorize~~
     - better model
 - SAM
-    - Import SAM and make the demo work on slider images.
-- extract embeddings
-- enhance
-- selective crop
+    - ~~Import SAM and make the demo work on slider images.~~
+    - model running out of memory on vercel.
+    - Implement sam.cpp in browser
+    - ~~Button to clear masks~~
+    - segment everything
+    - ~~extract and save embeddings~~
+    - selective crop to remove background/foreground.
 - Reverse image search.
+- enhance
 
 
 # NextJS ONNX Runtime Web Template
